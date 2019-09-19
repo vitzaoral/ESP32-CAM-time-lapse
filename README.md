@@ -1,6 +1,11 @@
 # ESP32-CAM time lapse with sending picture to the Cloudinary / Blynk
 Time-lapse image capture with ESP32 Camera. Camera makes picture in given interval and sends it to the FTP / CLoudinary server and to the Blynk Image widget.
 
+### Features:
+* Sending image in given time laps to the server
+* Capture image interval can be set from Blynk
+* Taking picture with or without embedded LED flash (can set in Blynk)
+
 > To build a project, you need to download all the necessary libraries and create the *settings.cpp* file in the *src* folder:
 ```c++
 // Project settings

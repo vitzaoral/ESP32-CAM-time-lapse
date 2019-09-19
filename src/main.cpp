@@ -1,12 +1,14 @@
 #include "esp_http_client.h"
 #include "esp_camera.h"
+#include "driver/rtc_io.h"
 #include <WiFi.h>
 #include "Arduino.h"
 #include <BlynkSimpleEsp32.h>
 #include "../src/settings.cpp"
 
-#include "soc/soc.h"          // Disable brownout problems
-#include "soc/rtc_cntl_reg.h" // Disable brownout problems
+// Disable brownout problems
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 
 // TODO: napeti baterie https://github.com/espressif/arduino-esp32/issues/102#issuecomment-469711422, https://electronics.stackexchange.com/questions/438418/what-are-the-ai-thinker-esp32-cams-analog-pins
 // https://randomnerdtutorials.com/esp32-cam-video-streaming-face-recognition-arduino-ide/
@@ -15,12 +17,13 @@
 // https://robotzero.one/time-lapse-esp32-cameras/
 // https://robotzero.one/wp-content/uploads/2019/04/Esp32CamTimelapsePost.ino
 
-// TODO: deepSleep interval poslat pres Blynk
-
 Settings settings;
 
-// Deep sleep in seconds
-int deep_sleep_interval = 300; 
+// Deep sleep interval in seconds
+int deep_sleep_interval = 285;
+
+// Use flash
+bool use_flash = false;
 
 // Device is connected to WiFi/Blynk and camera is setuped
 bool device_connected_and_prepared = false;
@@ -43,7 +46,44 @@ bool device_connected_and_prepared = false;
 #define HREF_GPIO_NUM 23
 #define PCLK_GPIO_NUM 22
 
+// You can use all GPIOs of the header on the button side as analog inputs (12-15,2,4).
+// You can define any GPIO pair as your I2C pins, just specify them in the Wire.begin() call.
 #define analog_pin GPIO_NUM_12
+
+// V0 - deep sleep interval in seconds
+// V1 - Blynk Image gallery, sended image
+// V2 - Terminal
+// V3 - deep sleep interval result
+// V4 - use flash
+// V5 - Local IP
+// V6 WIFi signal
+
+// Synchronize settings from Blynk server with device when internet is connected
+BLYNK_CONNECTED()
+{
+  Blynk.syncAll();
+}
+
+// deep sleep interval in seconds
+BLYNK_WRITE(V0)
+{
+  if (param.asInt())
+  {
+    deep_sleep_interval = param.asInt();
+    Serial.println("Deep sleep interval was set to: " + String(deep_sleep_interval));
+    Blynk.virtualWrite(V3, String(deep_sleep_interval));
+  }
+}
+
+BLYNK_WRITE(V4)
+{
+  if (param.asInt() == 1)
+  {
+    use_flash = true;
+    Serial.println("LED flash was enabled.");
+    Blynk.virtualWrite(V4, false);
+  }
+}
 
 bool init_wifi()
 {
@@ -64,8 +104,8 @@ bool init_wifi()
 bool init_blynk()
 {
   Blynk.config(settings.blynkAuth);
-  // timeout 3sec
-  Blynk.connect(1000);
+  // timeout v milisekundach * 3
+  Blynk.connect(3000);
   return Blynk.connected();
   // return true;
 }
@@ -97,9 +137,9 @@ bool init_camera()
   //init with high specs to pre-allocate larger buffers
   if (psramFound())
   {
-    // TODO pohrat si s kvalitou, nizsi je lepsi (0 nejlepsi)
     config.frame_size = FRAMESIZE_UXGA;
-    config.jpeg_quality = 10;
+    // 0 is best, 63 lowest
+    config.jpeg_quality = 8;
     config.fb_count = 2;
   }
   else
@@ -164,9 +204,14 @@ static esp_err_t take_send_photo()
   Serial.println("Taking picture...");
   camera_fb_t *fb = NULL;
 
-  //TODO: LED blick
-  //digitalWrite(GPIO_NUM_4, HIGH);
-  //delay(500);
+  // LED flash blick
+  if (use_flash)
+  {
+    // disable hold (prevents led blinking)
+    rtc_gpio_hold_dis(GPIO_NUM_4);
+    digitalWrite(GPIO_NUM_4, HIGH);
+    delay(500);
+  }
 
   fb = esp_camera_fb_get();
   if (!fb)
@@ -175,7 +220,13 @@ static esp_err_t take_send_photo()
     return ESP_FAIL;
   }
 
-  //digitalWrite(GPIO_NUM_4, LOW);
+  // turn of LED flash
+  if (use_flash)
+  {
+    digitalWrite(GPIO_NUM_4, LOW);
+    // enable hold (prevents led blinking)
+    rtc_gpio_hold_en(GPIO_NUM_4);
+  }
 
   esp_http_client_handle_t http_client;
 
@@ -207,35 +258,14 @@ static esp_err_t take_send_photo()
   return err;
 }
 
-void setupVoltage()
-{
-  int raw = analogRead(analog_pin);
-  float volt = raw / 4095.0f;
-  float batteryVoltage = volt * 4.2;
-  float batteryLevel = map(raw, 0.0f, 4095.0f, 0, 100);
-
-  Serial.print(" Battery Voltage:   ");
-  Serial.print(batteryVoltage);
-  Serial.print("   Level:   ");
-  Serial.print(batteryLevel);
-  Serial.println(" %");
-
-  Blynk.virtualWrite(V3, batteryVoltage);
-  Blynk.virtualWrite(V4, batteryLevel);
-}
-
 void setup()
 {
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+  //disable brownout detector
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
   Serial.begin(115200);
 
   // Available ESP32-CAM RTC GPIOs are: 12, 13, 14 and 15
-  pinMode(analog_pin, INPUT);
-
-  // camera LED flashlight
-  //pinMode(GPIO_NUM_4, OUTPUT);
-
   if (init_camera())
   {
     Serial.println("Camera OK");
@@ -247,8 +277,9 @@ void setup()
       Serial.println("Internet connected, connect to Blynk");
       if (init_blynk())
       {
-        Serial.println("Blynk connected, setup camera");
+        Serial.println("Blynk connected OK");
         device_connected_and_prepared = true;
+        delay(1000);
       }
       else
       {
@@ -270,17 +301,25 @@ void loop()
 {
   if (device_connected_and_prepared)
   {
+    Serial.print("Blynk status: ");
+    Serial.println(Blynk.connected());
+
     Blynk.virtualWrite(V5, WiFi.localIP().toString());
     Blynk.virtualWrite(V6, WiFi.RSSI());
 
-    setupVoltage();
+    if (use_flash)
+    {
+      // camera LED flashlight
+      pinMode(GPIO_NUM_4, OUTPUT);
+      Serial.println("Use flash");
+    }
     take_send_photo();
   }
 
   // TODO: nastudovat jestli je potreba nebo ne...
   Blynk.disconnect();
   WiFi.disconnect();
-  Serial.println("Disconnected WiFi and Blynk done, go to sleep...");
+  Serial.println("Disconnected WiFi and Blynk done, go to sleep for " + String(deep_sleep_interval) + " seconds.");
   esp_deep_sleep(deep_sleep_interval * 1000000);
 }
 

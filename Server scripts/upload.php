@@ -25,7 +25,10 @@ $text_rectangle_offset = 2;
 
 imagefilledrectangle($jpg_image, $offset_x, $offset_y + $text_rectangle_offset, $offset_x + $text_width, $offset_y - $text_height, $bg_color);
 imagettftext($jpg_image, $font_size, 0, $offset_x, $offset_y - 7, $font_color, $font, $text);
-imagejpeg($jpg_image, $file_to_write, 100);
+
+// Quality from 0 (LOW) to 100 (BEST)
+$jpg_quality = 90;
+imagejpeg($jpg_image, $file_to_write, $jpg_quality);
 imagedestroy($jpg_image);
 
 // Send image to Cloudinary API
