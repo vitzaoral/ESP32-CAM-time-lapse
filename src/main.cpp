@@ -1,7 +1,8 @@
 #include "esp_http_client.h"
 #include "esp_camera.h"
 #include "driver/rtc_io.h"
-#include <WiFi.h>
+#include <HTTPUpdate.h>
+#include <HTTPClient.h>
 #include "Arduino.h"
 #include <BlynkSimpleEsp32.h>
 #include "../src/settings.cpp"
@@ -16,6 +17,18 @@
 
 // https://robotzero.one/time-lapse-esp32-cameras/
 // https://robotzero.one/wp-content/uploads/2019/04/Esp32CamTimelapsePost.ino
+
+// TODO: jak rozdelit pro druhou kameru..
+
+// HTTP Clients for OTA over WiFi
+WiFiClient client;
+
+// start OTA update process
+bool startOTA = false;
+
+// OTA functions
+void checkNewVersionAndUpdate();
+void updateFirmware();
 
 Settings settings;
 
@@ -56,7 +69,11 @@ bool device_connected_and_prepared = false;
 // V3 - deep sleep interval result
 // V4 - use flash
 // V5 - Local IP
-// V6 WIFi signal
+// V6 - WIFi signal
+// V7 - version
+
+// Attach Blynk virtual serial terminal
+WidgetTerminal terminal(V2);
 
 // Synchronize settings from Blynk server with device when internet is connected
 BLYNK_CONNECTED()
@@ -75,6 +92,7 @@ BLYNK_WRITE(V0)
   }
 }
 
+// LED flash
 BLYNK_WRITE(V4)
 {
   if (param.asInt() == 1)
@@ -82,6 +100,31 @@ BLYNK_WRITE(V4)
     use_flash = true;
     Serial.println("LED flash was enabled.");
     Blynk.virtualWrite(V4, false);
+  }
+}
+
+// Terminal input
+BLYNK_WRITE(V2)
+{
+  String valueFromTerminal = param.asStr();
+
+  if (String("clear") == valueFromTerminal)
+  {
+    terminal.clear();
+    terminal.println("CLEARED");
+    terminal.flush();
+  }
+  else if (String("update") == valueFromTerminal)
+  {
+    terminal.clear();
+    terminal.println("Start OTA enabled");
+    terminal.flush();
+    startOTA = true;
+  }
+  else if (valueFromTerminal != "\n" || valueFromTerminal != "\r" || valueFromTerminal != "")
+  {
+    terminal.println(String("unknown command: ") + valueFromTerminal);
+    terminal.flush();
   }
 }
 
@@ -231,7 +274,9 @@ static esp_err_t take_send_photo()
   esp_http_client_handle_t http_client;
 
   esp_http_client_config_t config_client = {0};
-  config_client.url = settings.imageUploadScriptUrl;
+  String url = String(settings.imageUploadScriptUrl) + "?camera=" + String(settings.cameraNumber);
+  config_client.url = url.c_str();
+  Serial.println("Upload URL: ") + url;
   config_client.event_handler = _http_event_handler;
   config_client.method = HTTP_METHOD_POST;
 
@@ -306,6 +351,7 @@ void loop()
 
     Blynk.virtualWrite(V5, WiFi.localIP().toString());
     Blynk.virtualWrite(V6, WiFi.RSSI());
+    Blynk.virtualWrite(V7, settings.version);
 
     if (use_flash)
     {
@@ -313,7 +359,11 @@ void loop()
       pinMode(GPIO_NUM_4, OUTPUT);
       Serial.println("Use flash");
     }
+
     take_send_photo();
+
+    // TODO: OTA asi nejde, mala pamet
+    // checkNewVersionAndUpdate();
   }
 
   // TODO: nastudovat jestli je potreba nebo ne...
@@ -321,6 +371,87 @@ void loop()
   WiFi.disconnect();
   Serial.println("Disconnected WiFi and Blynk done, go to sleep for " + String(deep_sleep_interval) + " seconds.");
   esp_deep_sleep(deep_sleep_interval * 1000000);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+/// OTA SECTION
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void checkNewVersionAndUpdate()
+{
+  Serial.println("Checking new firmware version..");
+  if (!startOTA)
+  {
+    Serial.println("OTA - not setted");
+    return;
+  }
+  else
+  {
+    startOTA = false;
+  }
+
+  terminal.println("Start OTA, check internet connection");
+
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.println("WiFi is not connected!");
+    return;
+  }
+
+  HTTPClient http;
+  http.begin(client, settings.firmwareVersionUrl);
+  int httpCode = http.GET();
+
+  if (httpCode == HTTP_CODE_OK)
+  {
+    String version = http.getString();
+    Serial.println("Version: " + version);
+
+    if (String(settings.version) != version)
+    {
+      Serial.println("!!! START OTA UPDATE !!!");
+      updateFirmware();
+    }
+    else
+    {
+      Serial.println("Already on the latest version");
+    }
+  }
+  else
+  {
+    Serial.println("Failed verify version from server, status code: " + String(httpCode));
+  }
+
+  http.end();
+  Serial.println("Restart after OTA, bye");
+  delay(1000);
+  ESP.restart();
+}
+
+void updateFirmware()
+{
+  t_httpUpdate_return ret = httpUpdate.update(client, settings.firmwareBinUrl); /// FOR ESP32 HTTP OTA
+
+  Serial.println("OTA RESULT: " + String(ret));
+
+  switch (ret)
+  {
+  case HTTP_UPDATE_FAILED:
+    Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str()); /// FOR ESP32
+    // char currentString[64];
+    // sprintf(currentString, "\nHTTP_UPDATE_FAILD Error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str()); /// FOR ESP32
+    // Serial.println(currentString);
+    break;
+
+  case HTTP_UPDATE_NO_UPDATES:
+    Serial.println("HTTP_UPDATE_NO_UPDATES");
+    break;
+
+  case HTTP_UPDATE_OK:
+    Serial.println("OTA OK");
+    break;
+  }
+  ESP.restart();
 }
 
 // 5.9.2019 21:00 4.11V

@@ -4,6 +4,8 @@ header('Content-Type: application/json');
 $received = file_get_contents('php://input');
 $file_to_write = date("d.m.Y-H:i:s") . ".jpg";
 
+$camera_number = $_GET['camera'];
+
 // settings TODO
 $cloudinary_upload_preset = "";
 $cloudinary_url = "";
@@ -11,15 +13,15 @@ $blynk_auth_token = "";
 
 // Insert text to image
 $jpg_image = imagecreatefromstring($received);
-$text = date("d.m.Y H:i:s");
+$text = "CAM" . $camera_number . " " . date("d.m.Y H:i:s");
 $font =  dirname(__FILE__) . '/arial.ttf';
 $font_color = imagecolorallocate($jpg_image, 0, 0, 0);
 $bg_color = imagecolorallocatealpha($jpg_image, 220, 220, 220, 100);
 
 $font_size = 40;
-$offset_x = 1090;
+$offset_x = 950;
 $offset_y = 85;
-$text_width = 520;
+$text_width = 650;
 $text_height = 55;
 $text_rectangle_offset = 2;
 
@@ -33,7 +35,8 @@ imagedestroy($jpg_image);
 
 // Send image to Cloudinary API
 $headers = array("Content-Type:multipart/form-data");
-$post_fields = array("file" => new CURLFile($file_to_write), "upload_preset" => $cloudinary_upload_preset);
+$folder = "camera_" . $camera_number;
+$post_fields = array("file" => new CURLFile($file_to_write), "upload_preset" => $cloudinary_upload_preset, "folder" => $folder);
 
 $ch = curl_init();
 $options = array(

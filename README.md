@@ -12,10 +12,14 @@ Time-lapse image capture with ESP32 Camera. Camera makes picture in given interv
 struct Settings
 {
     const char *blynkAuth = "XXX";
+    const int cameraNumber = 1;
+
     const char *wifiSSID = "YYY";
     const char *wifiPassword = "ZZZ";
     const char *imageUploadScriptUrl = "http://example.com/upload.php";
     const char *version = "1.0.0";
+    const char *firmwareVersionUrl = "http://example.com/version.txt";
+    const char *firmwareBinUrl = "http://example.com/firmware.bin";
 };
 ```
 
