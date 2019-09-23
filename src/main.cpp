@@ -18,8 +18,6 @@
 // https://robotzero.one/time-lapse-esp32-cameras/
 // https://robotzero.one/wp-content/uploads/2019/04/Esp32CamTimelapsePost.ino
 
-// TODO: jak rozdelit pro druhou kameru..
-
 // HTTP Clients for OTA over WiFi
 WiFiClient client;
 
