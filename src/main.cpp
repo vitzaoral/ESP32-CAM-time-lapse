@@ -5,6 +5,8 @@
 #include <HTTPClient.h>
 #include "Arduino.h"
 #include <BlynkSimpleEsp32.h>
+#include <TimeLib.h>
+#include <WidgetRTC.h>
 #include "../src/settings.cpp"
 
 // Disable brownout problems
@@ -17,6 +19,8 @@
 
 // https://robotzero.one/time-lapse-esp32-cameras/
 // https://robotzero.one/wp-content/uploads/2019/04/Esp32CamTimelapsePost.ino
+
+// TODO: logika jestli je poplach
 
 // HTTP Clients for OTA over WiFi
 WiFiClient client;
@@ -35,6 +39,17 @@ int deep_sleep_interval = 285;
 
 // Use flash
 bool use_flash = false;
+
+// Take image depends on current time
+bool use_rtc = true;
+
+// maxHour 22:00
+int max_hour = 22;
+int max_minute = 0;
+
+// min hour 6:00
+int min_hour = 6;
+int min_minute = 0;
 
 // Device is connected to WiFi/Blynk and camera is setuped
 bool device_connected_and_prepared = false;
@@ -59,9 +74,9 @@ bool device_connected_and_prepared = false;
 
 // You can use all GPIOs of the header on the button side as analog inputs (12-15,2,4).
 // You can define any GPIO pair as your I2C pins, just specify them in the Wire.begin() call.
-#define analog_pin GPIO_NUM_12
+// BUT analog pins doesn't works after using  WiFi.Begin() !!!
 
-// V0 - deep sleep interval in seconds
+// V0 - deep sleep interval in seconds slider
 // V1 - Blynk Image gallery, sended image
 // V2 - Terminal
 // V3 - deep sleep interval result
@@ -69,13 +84,22 @@ bool device_connected_and_prepared = false;
 // V5 - Local IP
 // V6 - WIFi signal
 // V7 - version
+// V8 - current time
+// V9 - setted max/min time
+// V10 - time input
+// V11 - use rtc
 
 // Attach Blynk virtual serial terminal
 WidgetTerminal terminal(V2);
 
+// Get real time
+WidgetRTC rtc;
+
 // Synchronize settings from Blynk server with device when internet is connected
 BLYNK_CONNECTED()
 {
+  Serial.println("Blynk synchronized");
+  rtc.begin();
   Blynk.syncAll();
 }
 
@@ -90,6 +114,24 @@ BLYNK_WRITE(V0)
   }
 }
 
+// set image capture time interval (min and max hour:minute)
+BLYNK_WRITE(V10)
+{
+  TimeInputParam t(param);
+
+  if (t.hasStartTime())
+  {
+    min_hour = t.getStartHour();
+    min_minute = t.getStartMinute();
+  }
+
+  if (t.hasStopTime())
+  {
+    max_hour = t.getStopHour();
+    max_minute = t.getStopMinute();
+  }
+}
+
 // LED flash
 BLYNK_WRITE(V4)
 {
@@ -99,6 +141,12 @@ BLYNK_WRITE(V4)
     Serial.println("LED flash was enabled.");
     Blynk.virtualWrite(V4, false);
   }
+}
+
+// RTC - use or not use a real time
+BLYNK_WRITE(V11)
+{
+  use_rtc = param.asInt();
 }
 
 // Terminal input
@@ -301,6 +349,21 @@ static esp_err_t take_send_photo()
   return err;
 }
 
+// Check if real time is
+bool current_time_ok()
+{
+  return min_hour <= hour() && min_minute <= minute() &&
+         max_hour >= hour() && max_minute >= minute();
+}
+
+void waitTakeSendPhoto()
+{
+  // delay makes more bright picture (camera has time to boot on)
+  Serial.println("Waiting for taking camera picture.");
+  delay(7000);
+  take_send_photo();
+}
+
 void setup()
 {
   //disable brownout detector
@@ -308,21 +371,22 @@ void setup()
 
   Serial.begin(115200);
 
-  // Available ESP32-CAM RTC GPIOs are: 12, 13, 14 and 15
   if (init_camera())
   {
     Serial.println("Camera OK");
-    // delay makes more bright picture (camera has time to boot on)
-    delay(10000);
 
     if (init_wifi())
     {
       Serial.println("Internet connected, connect to Blynk");
       if (init_blynk())
       {
-        Serial.println("Blynk connected OK");
-        device_connected_and_prepared = true;
+        Serial.println("Blynk connected OK, wait to sync");
+        Blynk.run();
+        // delay for Blynk sync
         delay(1000);
+
+        device_connected_and_prepared = true;
+        Serial.println("Setup done");
       }
       else
       {
@@ -344,27 +408,50 @@ void loop()
 {
   if (device_connected_and_prepared)
   {
-    Serial.print("Blynk status: ");
-    Serial.println(Blynk.connected());
-
+    Serial.println("Set values to Blynk");
     Blynk.virtualWrite(V5, WiFi.localIP().toString());
     Blynk.virtualWrite(V6, WiFi.RSSI());
     Blynk.virtualWrite(V7, settings.version);
 
+    String currentTime = String(hour()) + ":" + minute();
+    String minMaxSettedTime = String(min_hour) + ":" + String(min_minute) + " " + String(max_hour) + ":" + String(max_minute);
+    Serial.println(minMaxSettedTime);
+
+    Blynk.virtualWrite(V8, currentTime);
+    Blynk.virtualWrite(V9, minMaxSettedTime);
+
+    // use flash - take capture always
     if (use_flash)
     {
       // camera LED flashlight
       pinMode(GPIO_NUM_4, OUTPUT);
       Serial.println("Use flash");
+      waitTakeSendPhoto();
     }
-
-    take_send_photo();
+    // don't user real time - take capture always
+    else if (!use_rtc)
+    {
+      waitTakeSendPhoto();
+    }
+    // check if time is OK
+    else if (current_time_ok())
+    {
+      waitTakeSendPhoto();
+    }
+    // outside of time interval
+    else
+    {
+      Serial.println("Too late for capture image");
+    }
 
     // TODO: OTA asi nejde, mala pamet
     // checkNewVersionAndUpdate();
   }
+  else
+  {
+    Serial.println("Camera or internet connection is not ready");
+  }
 
-  // TODO: nastudovat jestli je potreba nebo ne...
   Blynk.disconnect();
   WiFi.disconnect();
   Serial.println("Disconnected WiFi and Blynk done, go to sleep for " + String(deep_sleep_interval) + " seconds.");

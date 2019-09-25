@@ -4,7 +4,8 @@ Time-lapse image capture with ESP32 Camera. Camera makes picture in given interv
 ### Features:
 * Sending image in given time laps to the server
 * Capture image interval can be set from Blynk
-* Taking picture with or without embedded LED flash (can set in Blynk)
+* Taking picture with or without embedded LED flash (can set in the Blynk)
+* Can set time interval in Blynk to decide to take or not a image (based on Blynk real time widget and Blynk time input widget)
 
 > To build a project, you need to download all the necessary libraries and create the *settings.cpp* file in the *src* folder:
 ```c++
@@ -38,14 +39,6 @@ On the server, PHP script:
 
 PHP script is located in the *Server scripts folder*. It's needed to set up your *upload_preset*, cloudinary URL, and *blynkAuthToken*. 
 
-### Schema:
-TODO
-
-### Powering:
-3v3 regulator - https://randomnerdtutorials.com/esp8266-voltage-regulator-lipo-and-li-ion-batteries/
-
-### PCB circuit:
-* TODO
 
 ### Blynk:
 * TODO
