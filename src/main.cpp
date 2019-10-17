@@ -13,7 +13,6 @@
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
-// TODO: napeti baterie https://github.com/espressif/arduino-esp32/issues/102#issuecomment-469711422, https://electronics.stackexchange.com/questions/438418/what-are-the-ai-thinker-esp32-cams-analog-pins
 // https://randomnerdtutorials.com/esp32-cam-video-streaming-face-recognition-arduino-ide/
 // https://loboris.eu/ESP32/ESP32-CAM%20Product%20Specification.pdf
 
@@ -349,11 +348,14 @@ static esp_err_t take_send_photo()
   return err;
 }
 
-// Check if real time is
-bool current_time_ok()
+bool checkLowerTime()
 {
-  return min_hour <= hour() && min_minute <= minute() &&
-         max_hour >= hour() && max_minute >= minute();
+  return min_hour < hour() || (min_hour == hour() && min_minute <= minute());
+}
+
+bool checkHigherTime()
+{
+  return max_hour > hour() || (max_hour == hour() && max_minute >= minute());
 }
 
 void waitTakeSendPhoto()
@@ -434,7 +436,7 @@ void loop()
       waitTakeSendPhoto();
     }
     // check if time is OK
-    else if (current_time_ok())
+    else if (checkLowerTime() && checkHigherTime())
     {
       waitTakeSendPhoto();
     }
