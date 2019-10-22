@@ -7,6 +7,7 @@
 #include <BlynkSimpleEsp32.h>
 #include <TimeLib.h>
 #include <WidgetRTC.h>
+#include "driver/adc.h"
 #include "../src/settings.cpp"
 
 // Disable brownout problems
@@ -177,7 +178,10 @@ bool init_wifi()
 {
   int connAttempts = 0;
   Serial.println("\r\nConnecting to: " + String(settings.wifiSSID));
+  // try config - quicker for WiFi connection
+  WiFi.config(settings.ip, settings.gateway, settings.subnet, settings.gateway);
   WiFi.begin(settings.wifiSSID, settings.wifiPassword);
+  
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
@@ -411,7 +415,7 @@ void loop()
   if (device_connected_and_prepared)
   {
     Serial.println("Set values to Blynk");
-    Blynk.virtualWrite(V5, WiFi.localIP().toString());
+    Blynk.virtualWrite(V5, "IP: " + WiFi.localIP().toString() + "|G: " + WiFi.gatewayIP().toString() + "|S: " + WiFi.subnetMask().toString() + "|DNS: " + WiFi.dnsIP().toString());
     Blynk.virtualWrite(V6, WiFi.RSSI());
     Blynk.virtualWrite(V7, settings.version);
 
@@ -457,11 +461,13 @@ void loop()
   Blynk.disconnect();
   WiFi.disconnect();
   Serial.println("Disconnected WiFi and Blynk done, go to sleep for " + String(deep_sleep_interval) + " seconds.");
+  // https://github.com/espressif/arduino-esp32/issues/1113#issuecomment-494132709
+  adc_power_off();
   esp_deep_sleep(deep_sleep_interval * 1000000);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-/// OTA SECTION
+/// OTA SECTION (small memmory, doesn't work)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void checkNewVersionAndUpdate()

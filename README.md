@@ -9,6 +9,8 @@ Time-lapse image capture with ESP32 Camera. Camera makes picture in given interv
 
 > To build a project, you need to download all the necessary libraries and create the *settings.cpp* file in the *src* folder:
 ```c++
+#include "IPAddress.h"
+
 // Project settings
 struct Settings
 {
@@ -21,6 +23,9 @@ struct Settings
     const char *version = "1.0.0";
     const char *firmwareVersionUrl = "http://example.com/version.txt";
     const char *firmwareBinUrl = "http://example.com/firmware.bin";
+    IPAddress ip = IPAddress(192, 168, 43, 202);
+    IPAddress gateway = IPAddress(192, 168, 43, 1);
+    IPAddress subnet = IPAddress(255, 255, 255, 0);
 };
 ```
 
