@@ -1,7 +1,6 @@
 #include "esp_http_client.h"
 #include "esp_camera.h"
 #include "driver/rtc_io.h"
-#include <HTTPUpdate.h>
 #include <HTTPClient.h>
 #include "Arduino.h"
 #include <BlynkSimpleEsp32.h>
@@ -20,22 +19,12 @@
 // https://robotzero.one/time-lapse-esp32-cameras/
 // https://robotzero.one/wp-content/uploads/2019/04/Esp32CamTimelapsePost.ino
 
-// TODO: logika jestli je poplach
-
-// HTTP Clients for OTA over WiFi
-WiFiClient client;
-
-// start OTA update process
-bool startOTA = false;
-
 // is alarm (based on other ESP32 device - Beehive alarm controller)
 bool isAlarm = false;
 
-// OTA functions
-void checkNewVersionAndUpdate();
-void updateFirmware();
-
 Settings settings;
+
+WiFiClient client;
 
 // Deep sleep interval in seconds
 int deep_sleep_interval = 285;
@@ -167,12 +156,12 @@ BLYNK_WRITE(V2)
     terminal.println("CLEARED");
     terminal.flush();
   }
-  else if (String("update") == valueFromTerminal)
+  else if (String("restart") == valueFromTerminal)
   {
     terminal.clear();
-    terminal.println("Start OTA enabled");
+    terminal.println("Restart, bye");
     terminal.flush();
-    startOTA = true;
+    ESP.restart();
   }
   else if (valueFromTerminal != "\n" || valueFromTerminal != "\r" || valueFromTerminal != "")
   {
@@ -533,87 +522,6 @@ void loop()
   // https://github.com/espressif/arduino-esp32/issues/1113#issuecomment-494132709
   adc_power_off();
   esp_deep_sleep(get_deep_sleep_interval() * 1000000);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-/// OTA SECTION (small memmory, doesn't work)
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void checkNewVersionAndUpdate()
-{
-  Serial.println("Checking new firmware version..");
-  if (!startOTA)
-  {
-    Serial.println("OTA - not setted");
-    return;
-  }
-  else
-  {
-    startOTA = false;
-  }
-
-  terminal.println("Start OTA, check internet connection");
-
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    Serial.println("WiFi is not connected!");
-    return;
-  }
-
-  HTTPClient http;
-  http.begin(client, settings.firmwareVersionUrl);
-  int httpCode = http.GET();
-
-  if (httpCode == HTTP_CODE_OK)
-  {
-    String version = http.getString();
-    Serial.println("Version: " + version);
-
-    if (String(settings.version) != version)
-    {
-      Serial.println("!!! START OTA UPDATE !!!");
-      updateFirmware();
-    }
-    else
-    {
-      Serial.println("Already on the latest version");
-    }
-  }
-  else
-  {
-    Serial.println("Failed verify version from server, status code: " + String(httpCode));
-  }
-
-  http.end();
-  Serial.println("Restart after OTA, bye");
-  delay(1000);
-  ESP.restart();
-}
-
-void updateFirmware()
-{
-  t_httpUpdate_return ret = httpUpdate.update(client, settings.firmwareBinUrl); /// FOR ESP32 HTTP OTA
-
-  Serial.println("OTA RESULT: " + String(ret));
-
-  switch (ret)
-  {
-  case HTTP_UPDATE_FAILED:
-    Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str()); /// FOR ESP32
-    // char currentString[64];
-    // sprintf(currentString, "\nHTTP_UPDATE_FAILD Error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str()); /// FOR ESP32
-    // Serial.println(currentString);
-    break;
-
-  case HTTP_UPDATE_NO_UPDATES:
-    Serial.println("HTTP_UPDATE_NO_UPDATES");
-    break;
-
-  case HTTP_UPDATE_OK:
-    Serial.println("OTA OK");
-    break;
-  }
-  ESP.restart();
 }
 
 // 5.9.2019 21:00 4.11V
