@@ -23,9 +23,14 @@ struct Settings
     const char *version = "1.0.0";
     const char *firmwareVersionUrl = "http://example.com/version.txt";
     const char *firmwareBinUrl = "http://example.com/firmware.bin";
+
     IPAddress ip = IPAddress(192, 168, 43, 202);
     IPAddress gateway = IPAddress(192, 168, 43, 1);
     IPAddress subnet = IPAddress(255, 255, 255, 0);
+
+    // alarm based on the other ESP32 device
+    const char *alarmEnabled = "http://blynk-cloud.com/auth-token/get/V1";
+    const char *isAlarm = "http://blynk-cloud.com/auth-token/get/V2";
 };
 ```
 

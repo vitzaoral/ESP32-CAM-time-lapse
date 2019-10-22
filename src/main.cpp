@@ -28,6 +28,9 @@ WiFiClient client;
 // start OTA update process
 bool startOTA = false;
 
+// is alarm (based on other ESP32 device - Beehive alarm controller)
+bool isAlarm = false;
+
 // OTA functions
 void checkNewVersionAndUpdate();
 void updateFirmware();
@@ -36,6 +39,9 @@ Settings settings;
 
 // Deep sleep interval in seconds
 int deep_sleep_interval = 285;
+
+// Deep sleep alarm interval in seconds
+int deep_sleep_alarm_interval = 20;
 
 // Use flash
 bool use_flash = false;
@@ -88,6 +94,7 @@ bool device_connected_and_prepared = false;
 // V9 - setted max/min time
 // V10 - time input
 // V11 - use rtc
+// V12 - is alarm
 
 // Attach Blynk virtual serial terminal
 WidgetTerminal terminal(V2);
@@ -174,6 +181,11 @@ BLYNK_WRITE(V2)
   }
 }
 
+int get_deep_sleep_interval()
+{
+  return isAlarm ? deep_sleep_alarm_interval : deep_sleep_interval;
+}
+
 bool init_wifi()
 {
   int connAttempts = 0;
@@ -181,7 +193,7 @@ bool init_wifi()
   // try config - quicker for WiFi connection
   WiFi.config(settings.ip, settings.gateway, settings.subnet, settings.gateway);
   WiFi.begin(settings.wifiSSID, settings.wifiPassword);
-  
+
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
@@ -370,6 +382,55 @@ void waitTakeSendPhoto()
   take_send_photo();
 }
 
+void checkBeehivesAlarm()
+{
+  isAlarm = false;
+
+  HTTPClient http;
+  http.begin(client, settings.isAlarm);
+  int httpCode = http.GET();
+
+  if (httpCode == HTTP_CODE_OK)
+  {
+    String isAlarmValue = http.getString();
+    Serial.println("Alarm: " + isAlarmValue);
+
+    if (isAlarmValue != "[\"OK\"]")
+    {
+      Serial.println("!!! ALARM, check is alarm enabled !!!");
+
+      http.begin(client, settings.alarmEnabled);
+      httpCode = http.GET();
+
+      if (httpCode == HTTP_CODE_OK)
+      {
+        String isAlarmEnabled = http.getString();
+        Serial.println("Beehives alarm enabled: " + isAlarmEnabled);
+
+        if (isAlarmEnabled == "[\"1\"]")
+        {
+          isAlarm = true;
+          Serial.println("!!! ALARM setted !!!");
+        }
+      }
+      else
+      {
+        Serial.println("Failed verify status of beehives alarm, status code: " + String(httpCode));
+      }
+    }
+    else
+    {
+      Serial.println("No alarm");
+    }
+  }
+  else
+  {
+    Serial.println("Failed verify version beehives alarm, status code: " + String(httpCode));
+  }
+
+  http.end();
+}
+
 void setup()
 {
   //disable brownout detector
@@ -426,6 +487,9 @@ void loop()
     Blynk.virtualWrite(V8, currentTime);
     Blynk.virtualWrite(V9, minMaxSettedTime);
 
+    checkBeehivesAlarm();
+    Blynk.virtualWrite(V12, isAlarm ? "AKTUÁLNÍ ALARM!" : "OK");
+
     // use flash - take capture always
     if (use_flash)
     {
@@ -436,6 +500,11 @@ void loop()
     }
     // don't user real time - take capture always
     else if (!use_rtc)
+    {
+      waitTakeSendPhoto();
+    }
+    // alarm - take photo always
+    else if (isAlarm)
     {
       waitTakeSendPhoto();
     }
@@ -460,10 +529,10 @@ void loop()
 
   Blynk.disconnect();
   WiFi.disconnect();
-  Serial.println("Disconnected WiFi and Blynk done, go to sleep for " + String(deep_sleep_interval) + " seconds.");
+  Serial.println("Disconnected WiFi and Blynk done, go to sleep for " + String(get_deep_sleep_interval()) + " seconds.");
   // https://github.com/espressif/arduino-esp32/issues/1113#issuecomment-494132709
   adc_power_off();
-  esp_deep_sleep(deep_sleep_interval * 1000000);
+  esp_deep_sleep(get_deep_sleep_interval() * 1000000);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
