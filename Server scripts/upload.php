@@ -19,7 +19,7 @@ $font_color = imagecolorallocate($jpg_image, 0, 0, 0);
 $bg_color = imagecolorallocatealpha($jpg_image, 220, 220, 220, 100);
 
 $font_size = 40;
-$offset_x = 950;
+$offset_x = 0;
 $offset_y = 85;
 $text_width = 650;
 $text_height = 55;
