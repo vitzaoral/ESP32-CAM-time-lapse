@@ -52,5 +52,5 @@ PHP script is located in the *Server scripts folder*. It's needed to set up your
 
 ### Blynk:
 Camera in Blynk iOS application.
-![Blynk application](https://github.com/vitzaoral/esp32_beehive/blob/master/blynk.jpg)
+![Blynk application](https://github.com/vitzaoral/ESP32-CAM-time-lapse/blob/master/blynk.jpg)
 
