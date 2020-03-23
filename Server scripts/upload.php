@@ -6,10 +6,11 @@ $file_to_write = date("d.m.Y-H:i:s") . ".jpg";
 
 $camera_number = $_GET['camera'];
 
-// settings TODO
+// TODO: insert your settings !
 $cloudinary_upload_preset = "";
 $cloudinary_url = "";
-$blynk_auth_token = "";
+$blynk_auth_token_cam1 = "";
+$blynk_auth_token_cam2 = "";
 
 // Insert text to image
 $jpg_image = imagecreatefromstring($received);
@@ -57,8 +58,16 @@ curl_close($ch);
 $json = json_decode($response);
 $image_public_url = $json->url;
 
-// Write image URL to blynk image widget on pin
+// Write image URL to blynk image widget on pin (based on camera number)
 $blynk_pin = "V1";
+
+$blynk_auth_token = "";
+if ($camera_number == "1") {
+    $blynk_auth_token = $blynk_auth_token_cam1;
+} elseif ($camera_number == "2") {
+    $blynk_auth_token = $blynk_auth_token_cam2;
+}
+
 $url = "http://blynk-cloud.com/" . $blynk_auth_token . "/update/" . $blynk_pin . "?urls=" . $image_public_url;
 
 $ch = curl_init();
