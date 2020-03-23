@@ -6,6 +6,7 @@
 #include <BlynkSimpleEsp32.h>
 #include <TimeLib.h>
 #include <WidgetRTC.h>
+#include <EEPROM.h>
 #include "driver/adc.h"
 #include "../src/settings.cpp"
 
@@ -66,6 +67,10 @@ bool device_connected_and_prepared = false;
 #define VSYNC_GPIO_NUM 25
 #define HREF_GPIO_NUM 23
 #define PCLK_GPIO_NUM 22
+
+// 1 byte in EEPROM
+#define EEPROM_SIZE 1
+#define WIFI_ATTEMPTS_COUNT 5
 
 // You can use all GPIOs of the header on the button side as analog inputs (12-15,2,4).
 // You can define any GPIO pair as your I2C pins, just specify them in the Wire.begin() call.
@@ -180,7 +185,7 @@ bool init_wifi()
   int connAttempts = 0;
   Serial.println("\r\nConnecting to: " + String(settings.wifiSSID));
   // try config - quicker for WiFi connection
-  WiFi.config(settings.ip, settings.gateway, settings.subnet, settings.gateway);
+  //WiFi.config(settings.ip, settings.gateway, settings.subnet, settings.gateway);
   WiFi.begin(settings.wifiSSID, settings.wifiPassword);
 
   while (WiFi.status() != WL_CONNECTED)
@@ -427,6 +432,9 @@ void setup()
 
   Serial.begin(115200);
 
+  // initialize EEPROM with predefined size
+  EEPROM.begin(EEPROM_SIZE);
+
   if (init_camera())
   {
     Serial.println("Camera OK");
@@ -443,6 +451,9 @@ void setup()
 
         device_connected_and_prepared = true;
         Serial.println("Setup done");
+
+        EEPROM.write(0, 0);
+        EEPROM.commit();
       }
       else
       {
@@ -452,6 +463,22 @@ void setup()
     else
     {
       Serial.println("No WiFi");
+      int attempsCount = EEPROM.read(0);
+
+      if (attempsCount >= WIFI_ATTEMPTS_COUNT)
+      {
+        Serial.println("RESTART");
+        EEPROM.write(0, 0);
+        EEPROM.commit();
+        ESP.restart();
+      }
+      else
+      {
+        attempsCount += 1;
+        Serial.println("Attempts count " + String(attempsCount));
+        EEPROM.write(0, attempsCount);
+        EEPROM.commit();
+      }
     }
   }
   else
