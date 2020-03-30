@@ -9,12 +9,30 @@ $camera_number = $_GET['camera'];
 // TODO: insert your settings !
 $cloudinary_upload_preset = "";
 $cloudinary_url = "";
+$blynk_auth_token_bees = "";
 $blynk_auth_token_cam1 = "";
 $blynk_auth_token_cam2 = "";
 
+// get outside temperature
+$url = "http://blynk-cloud.com/" . $blynk_auth_token_bees . "/get/V23";
+
+$ch = curl_init();
+$options = array(
+    CURLOPT_URL => $url,
+    CURLOPT_HEADER => false,
+    CURLOPT_RETURNTRANSFER => true
+);
+
+curl_setopt_array($ch, $options);
+$response = curl_exec($ch);
+curl_close($ch);
+
+$temperature = str_replace("[\"", '', $response);
+$temperature = str_replace("0\"]", '', $temperature);
+
 // Insert text to image
 $jpg_image = imagecreatefromstring($received);
-$text = "CAM" . $camera_number . " " . date("d.m.Y H:i:s");
+$text = "CAM" . $camera_number . " " . date("d.m.Y H:i:s") . " " . $temperature . "°C";
 $font =  dirname(__FILE__) . '/arial.ttf';
 $font_color = imagecolorallocate($jpg_image, 0, 0, 0);
 $bg_color = imagecolorallocatealpha($jpg_image, 220, 220, 220, 100);
@@ -22,7 +40,7 @@ $bg_color = imagecolorallocatealpha($jpg_image, 220, 220, 220, 100);
 $font_size = 40;
 $offset_x = 0;
 $offset_y = 85;
-$text_width = 650;
+$text_width = 800;
 $text_height = 55;
 $text_rectangle_offset = 2;
 
