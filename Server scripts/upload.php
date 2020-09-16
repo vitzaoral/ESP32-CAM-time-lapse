@@ -12,6 +12,7 @@ $cloudinary_url = "";
 $blynk_auth_token_bees = "";
 $blynk_auth_token_cam1 = "";
 $blynk_auth_token_cam2 = "";
+$blynk_auth_token_cam3 = "";
 
 // get outside temperature
 $url = "http://blynk-cloud.com/" . $blynk_auth_token_bees . "/get/V23";
@@ -84,6 +85,8 @@ if ($camera_number == "1") {
     $blynk_auth_token = $blynk_auth_token_cam1;
 } elseif ($camera_number == "2") {
     $blynk_auth_token = $blynk_auth_token_cam2;
+} elseif ($camera_number == "3") {
+    $blynk_auth_token = $blynk_auth_token_cam3;
 }
 
 $url = "http://blynk-cloud.com/" . $blynk_auth_token . "/update/" . $blynk_pin . "?urls=" . $image_public_url;
