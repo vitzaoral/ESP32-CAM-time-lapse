@@ -192,7 +192,7 @@ bool init_wifi()
   {
     delay(500);
     Serial.print(".");
-    if (connAttempts > 10)
+    if (connAttempts > 20)
       return false;
     connAttempts++;
   }
