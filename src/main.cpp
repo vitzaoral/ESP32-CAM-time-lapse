@@ -51,6 +51,8 @@ int min_minute = 0;
 bool device_connected_and_prepared = false;
 
 // CAMERA_MODEL_AI_THINKER
+// https://github.com/espressif/arduino-esp32/blob/master/libraries/ESP32/examples/Camera/CameraWebServer/camera_pins.h
+
 #define PWDN_GPIO_NUM 32
 #define RESET_GPIO_NUM -1
 #define XCLK_GPIO_NUM 0
@@ -89,6 +91,7 @@ bool device_connected_and_prepared = false;
 // V10 - time input
 // V11 - use rtc
 // V12 - is alarm
+// V13 - status
 
 // Attach Blynk virtual serial terminal
 WidgetTerminal terminal(V2);
@@ -161,7 +164,7 @@ BLYNK_WRITE(V2)
     terminal.println("CLEARED");
     terminal.flush();
   }
-  else if (String("restart") == valueFromTerminal)
+  else if (String("restart") == valueFromTerminal || String("reset") == valueFromTerminal)
   {
     terminal.clear();
     terminal.println("Restart, bye");
@@ -483,7 +486,19 @@ void setup()
   }
   else
   {
-    Serial.println("Camera init failed.");
+    // camera problem
+    if (init_wifi())
+    {
+      if (init_blynk())
+      {
+        Serial.println("Blynk connected OK, wait to sync");
+        Blynk.run();
+        // delay for Blynk sync
+        delay(1000);
+
+        Blynk.virtualWrite(V13, "Camera problem");
+      }
+    }
   }
 }
 
@@ -492,6 +507,8 @@ void loop()
   if (device_connected_and_prepared)
   {
     Serial.println("Set values to Blynk");
+    Blynk.virtualWrite(V13, "OK");
+
     Blynk.virtualWrite(V5, "IP: " + WiFi.localIP().toString() + "|G: " + WiFi.gatewayIP().toString() + "|S: " + WiFi.subnetMask().toString() + "|DNS: " + WiFi.dnsIP().toString());
     Blynk.virtualWrite(V6, WiFi.RSSI());
     Blynk.virtualWrite(V7, settings.version);
@@ -547,7 +564,7 @@ void loop()
   WiFi.disconnect();
   Serial.println("Disconnected WiFi and Blynk done, go to sleep for " + String(get_deep_sleep_interval()) + " seconds.");
   // https://github.com/espressif/arduino-esp32/issues/1113#issuecomment-494132709
-  adc_power_off();
+  adc_power_release();
   esp_deep_sleep(get_deep_sleep_interval() * 1000000);
 }
 
