@@ -232,7 +232,7 @@ bool init_camera()
   config.pin_sscb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
+  config.xclk_freq_hz = 20000000; // zkusit 16500000 https://github.com/espressif/esp32-camera/issues/150 // 20000000
   config.pixel_format = PIXFORMAT_JPEG;
 
   //init with high specs to pre-allocate larger buffers
@@ -240,14 +240,16 @@ bool init_camera()
   {
     config.frame_size = FRAMESIZE_UXGA;
     // 0 is best, 63 lowest
-    config.jpeg_quality = 8;
-    config.fb_count = 2;
+    config.jpeg_quality = 20; // zkusit 1
+    config.fb_count = 3; // zkusit 3?
+    Serial.printf("Buffer OK");
   }
   else
   {
     config.frame_size = FRAMESIZE_SVGA;
     config.jpeg_quality = 12;
     config.fb_count = 1;
+    Serial.printf("Small buffer!");
   }
 
   // camera init
@@ -337,6 +339,7 @@ static esp_err_t take_send_photo()
   Serial.println("Upload URL: ") + url;
   config_client.event_handler = _http_event_handler;
   config_client.method = HTTP_METHOD_POST;
+  config_client.timeout_ms = 5000;
 
   http_client = esp_http_client_init(&config_client);
 
@@ -375,7 +378,7 @@ void waitTakeSendPhoto()
 {
   // delay makes more bright picture (camera has time to boot on)
   Serial.println("Waiting for taking camera picture.");
-  delay(7000);
+  delay(12000);
   take_send_photo();
 }
 
