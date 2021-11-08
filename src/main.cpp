@@ -320,6 +320,7 @@ static esp_err_t take_send_photo()
   if (!fb)
   {
     Serial.println("Camera capture failed");
+    Blynk.virtualWrite(V13, "Camera capture failed");
     return ESP_FAIL;
   }
 
@@ -354,9 +355,10 @@ static esp_err_t take_send_photo()
     Serial.println(esp_http_client_get_status_code(http_client));
   }
   else
-  {
-    Serial.print("HTTP status error: ");
-    Serial.println(err);
+  { 
+    String errorMessage = "HTTP status error: " + String(err);
+    Serial.println(errorMessage);
+    Blynk.virtualWrite(V13, errorMessage);
   }
 
   esp_http_client_cleanup(http_client);
