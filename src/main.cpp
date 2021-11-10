@@ -241,7 +241,7 @@ bool init_camera()
     config.frame_size = FRAMESIZE_UXGA;
     // 0 is best, 63 lowest
     config.jpeg_quality = 20; // zkusit 1
-    config.fb_count = 3; // zkusit 3?
+    config.fb_count = 3;      // zkusit 3?
     Serial.printf("Buffer OK");
   }
   else
@@ -256,7 +256,65 @@ bool init_camera()
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK)
   {
-    Serial.printf("Camera init failed with error 0x%x", err);
+    String problem = "";
+
+    switch (err)
+    {
+    case ESP_FAIL:
+      problem = "Generic esp_err_t code indicating failure";
+      break;
+    case ESP_ERR_NO_MEM:
+      problem = "Out of memory";
+      break;
+    case ESP_ERR_INVALID_ARG:
+      problem = "Invalid argument";
+      break;
+    case ESP_ERR_INVALID_STATE:
+      problem = "Invalid state";
+      break;
+    case ESP_ERR_INVALID_SIZE:
+      problem = "Invalid size";
+      break;
+    case ESP_ERR_NOT_FOUND:
+      problem = "Requested resource not found";
+      break;
+    case ESP_ERR_NOT_SUPPORTED:
+      problem = "Operation or feature not supported";
+      break;
+    case ESP_ERR_TIMEOUT:
+      problem = "Operation timed out";
+      break;
+    case ESP_ERR_INVALID_RESPONSE:
+      problem = "Received response was invalid";
+      break;
+    case ESP_ERR_INVALID_CRC:
+      problem = "CRC or checksum was invalid";
+      break;
+    case ESP_ERR_INVALID_VERSION:
+      problem = "Version was invalid";
+      break;
+    case ESP_ERR_INVALID_MAC:
+      problem = "MAC address was invalid";
+      break;
+    default:
+      problem = "Unknown error";
+      break;
+    }
+
+    Serial.println(problem);
+
+    if (init_wifi())
+    {
+      if (init_blynk())
+      {
+        Serial.println("Blynk connected OK, wait to sync");
+        Blynk.run();
+        // delay for Blynk sync
+        delay(1000);
+
+        Blynk.virtualWrite(V13, problem);
+      }
+    }
     return false;
   }
   else
@@ -355,7 +413,7 @@ static esp_err_t take_send_photo()
     Serial.println(esp_http_client_get_status_code(http_client));
   }
   else
-  { 
+  {
     String errorMessage = "HTTP status error: " + String(err);
     Serial.println(errorMessage);
     Blynk.virtualWrite(V13, errorMessage);
@@ -491,19 +549,8 @@ void setup()
   }
   else
   {
-    // camera problem
-    if (init_wifi())
-    {
-      if (init_blynk())
-      {
-        Serial.println("Blynk connected OK, wait to sync");
-        Blynk.run();
-        // delay for Blynk sync
-        delay(1000);
-
-        Blynk.virtualWrite(V13, "Camera problem");
-      }
-    }
+    // camera problem - is logged in method..
+    Serial.println("camera problem ");
   }
 }
 
