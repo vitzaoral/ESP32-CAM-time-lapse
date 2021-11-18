@@ -310,7 +310,7 @@ bool init_camera()
         Serial.println("Blynk connected OK, wait to sync");
         Blynk.run();
         // delay for Blynk sync
-        delay(1000);
+        delay(2000);
 
         Blynk.virtualWrite(V13, problem);
       }
@@ -513,7 +513,7 @@ void setup()
         Serial.println("Blynk connected OK, wait to sync");
         Blynk.run();
         // delay for Blynk sync
-        delay(1000);
+        delay(2000);
 
         device_connected_and_prepared = true;
         Serial.println("Setup done");
