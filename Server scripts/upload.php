@@ -7,15 +7,17 @@ $file_to_write = date("d.m.Y-H:i:s") . ".jpg";
 $camera_number = $_GET['camera'];
 
 // TODO: insert your settings !
-$cloudinary_upload_preset = "";
-$cloudinary_url = "";
-$blynk_auth_token_bees = "";
-$blynk_auth_token_cam1 = "";
-$blynk_auth_token_cam2 = "";
-$blynk_auth_token_cam3 = "";
+$cloudinary_upload_preset = "qf37nkjl";
+$cloudinary_url = "https://api.cloudinary.com/v1_1/vitaz/image/upload";
+
+$blynk_auth_token_bees = "2e01a905ae40474b8c27eaf8bacc2bfa"; // TODO: blynk2 token..
+
+$blynk_auth_token_cam1 = "anAp0BIj66DFRWcN6lSqoVxeLcb3Vw3B";
+$blynk_auth_token_cam2 = "5xfxz0v6PwnIJDfmp3NrbGQpRSe_X0oC";
+$blynk_auth_token_cam3 = "z07Q_Mv7D5lf1ou0miTjKad0Y1c5HhK0";
 
 // get outside temperature
-$url = "http://blynk-cloud.com/" . $blynk_auth_token_bees . "/get/V23";
+$url = "http://blynk-cloud.com/" . $blynk_auth_token_bees . "/get/V23"; // TODO: blynk2 ..
 
 $ch = curl_init();
 $options = array(
@@ -78,7 +80,7 @@ $json = json_decode($response);
 $image_public_url = $json->url;
 
 // Write image URL to blynk image widget on pin (based on camera number)
-$blynk_pin = "V1";
+$blynk_pin = "v1";
 
 $blynk_auth_token = "";
 if ($camera_number == "1") {
@@ -89,7 +91,7 @@ if ($camera_number == "1") {
     $blynk_auth_token = $blynk_auth_token_cam3;
 }
 
-$url = "http://blynk-cloud.com/" . $blynk_auth_token . "/update/" . $blynk_pin . "?urls=" . $image_public_url;
+$url = "https://fra1.blynk.cloud/external/api/update/property?token=". $blynk_auth_token . "&pin=" . $blynk_pin . "&urls=" . $image_public_url;
 
 $ch = curl_init();
 $options = array(

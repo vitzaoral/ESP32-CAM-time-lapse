@@ -1,14 +1,21 @@
+#define BLYNK_PRINT Serial
+#define BLYNK_TEMPLATE_ID "TMPL2ZKFCUm5"
+#define BLYNK_DEVICE_NAME "ESP32 Kamera"
+#define BLYNK_FIRMWARE_VERSION "2.0.1"
+
+#include "Arduino.h"
 #include "esp_http_client.h"
 #include "esp_camera.h"
 #include "driver/rtc_io.h"
-#include <HTTPClient.h>
-#include "Arduino.h"
+
 #include <BlynkSimpleEsp32.h>
 #include <TimeLib.h>
-#include <WidgetRTC.h>
 #include <EEPROM.h>
 #include "driver/adc.h"
 #include "../src/settings.cpp"
+#include <WidgetRTC.h>
+#include <HTTPClient.h>
+#include <Update.h>
 
 // Disable brownout problems
 #include "soc/soc.h"
@@ -96,14 +103,11 @@ bool device_connected_and_prepared = false;
 // Attach Blynk virtual serial terminal
 WidgetTerminal terminal(V2);
 
-// Get real time
-WidgetRTC rtc;
-
 // Synchronize settings from Blynk server with device when internet is connected
 BLYNK_CONNECTED()
 {
+  Blynk.sendInternal("rtc", "sync"); // request current local time for device
   Serial.println("Blynk synchronized");
-  rtc.begin();
   Blynk.syncAll();
 }
 
@@ -116,6 +120,59 @@ BLYNK_WRITE(V0)
     Serial.println("Deep sleep interval was set to: " + String(deep_sleep_interval));
     Blynk.virtualWrite(V3, String(deep_sleep_interval));
   }
+}
+
+String overTheAirURL = "";
+
+BLYNK_WRITE(InternalPinOTA)
+{
+  overTheAirURL = param.asString();
+
+  Serial.println("OTA Started");
+  overTheAirURL = param.asString();
+  Serial.print("overTheAirURL = ");
+  Serial.println(overTheAirURL);
+
+  HTTPClient http;
+  http.begin(overTheAirURL);
+  int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK)
+  {
+    Serial.println("Bad httpCode");
+    return;
+  }
+  int contentLength = http.getSize();
+  if (contentLength <= 0)
+  {
+    Serial.println("No contentLength");
+    return;
+  }
+  bool canBegin = Update.begin(contentLength);
+  if (!canBegin)
+  {
+    Serial.println("Can't begin update");
+    return;
+  }
+  Client &client = http.getStream();
+  int written = Update.writeStream(client);
+  if (written != contentLength)
+  {
+    Serial.println("Bad contentLength");
+    return;
+  }
+  if (!Update.end())
+  {
+    Serial.println("Update not ended");
+    return;
+  }
+  if (!Update.isFinished())
+  {
+    Serial.println("Update not finished");
+    return;
+  }
+
+  Serial.println("Update OK");
+  ESP.restart();
 }
 
 // set image capture time interval (min and max hour:minute)
@@ -188,7 +245,7 @@ bool init_wifi()
   int connAttempts = 0;
   Serial.println("\r\nConnecting to: " + String(settings.wifiSSID));
   // try config - quicker for WiFi connection
-  //WiFi.config(settings.ip, settings.gateway, settings.subnet, settings.gateway);
+  // WiFi.config(settings.ip, settings.gateway, settings.subnet, settings.gateway);
   WiFi.begin(settings.wifiSSID, settings.wifiPassword);
 
   while (WiFi.status() != WL_CONNECTED)
@@ -235,7 +292,7 @@ bool init_camera()
   config.xclk_freq_hz = 20000000; // zkusit 16500000 https://github.com/espressif/esp32-camera/issues/150 // 20000000
   config.pixel_format = PIXFORMAT_JPEG;
 
-  //init with high specs to pre-allocate larger buffers
+  // init with high specs to pre-allocate larger buffers
   if (psramFound())
   {
     config.frame_size = FRAMESIZE_UXGA;
@@ -296,8 +353,14 @@ bool init_camera()
     case ESP_ERR_INVALID_MAC:
       problem = "MAC address was invalid";
       break;
+    case ESP_ERR_WIFI_BASE:
+      problem = "Starting number of WiFi error codes";
+      break;
+    case ESP_ERR_MESH_BASE:
+      problem = "Starting number of MESH error codes";
+      break;
     default:
-      problem = "Unknown error";
+      problem = String("Unknown error: ") + String(err);
       break;
     }
 
@@ -309,6 +372,7 @@ bool init_camera()
       {
         Serial.println("Blynk connected OK, wait to sync");
         Blynk.run();
+        Blynk.syncVirtual(V0);
         // delay for Blynk sync
         delay(2000);
 
@@ -442,58 +506,58 @@ void waitTakeSendPhoto()
   take_send_photo();
 }
 
-void checkBeehivesAlarm()
-{
-  isAlarm = false;
+// void checkBeehivesAlarm()
+// {
+//   isAlarm = false;
 
-  HTTPClient http;
-  http.begin(client, settings.isAlarm);
-  int httpCode = http.GET();
+//   HTTPClient http;
+//   http.begin(client, settings.isAlarm);
+//   int httpCode = http.GET();
 
-  if (httpCode == HTTP_CODE_OK)
-  {
-    String isAlarmValue = http.getString();
-    Serial.println("Alarm: " + isAlarmValue);
+//   if (httpCode == HTTP_CODE_OK)
+//   {
+//     String isAlarmValue = http.getString();
+//     Serial.println("Alarm: " + isAlarmValue);
 
-    if (isAlarmValue != "[\"OK\"]")
-    {
-      Serial.println("!!! ALARM, check is alarm enabled !!!");
+//     if (isAlarmValue != "[\"OK\"]")
+//     {
+//       Serial.println("!!! ALARM, check is alarm enabled !!!");
 
-      http.begin(client, settings.alarmEnabled);
-      httpCode = http.GET();
+//       http.begin(client, settings.alarmEnabled);
+//       httpCode = http.GET();
 
-      if (httpCode == HTTP_CODE_OK)
-      {
-        String isAlarmEnabled = http.getString();
-        Serial.println("Beehives alarm enabled: " + isAlarmEnabled);
+//       if (httpCode == HTTP_CODE_OK)
+//       {
+//         String isAlarmEnabled = http.getString();
+//         Serial.println("Beehives alarm enabled: " + isAlarmEnabled);
 
-        if (isAlarmEnabled == "[\"1\"]")
-        {
-          isAlarm = true;
-          Serial.println("!!! ALARM setted !!!");
-        }
-      }
-      else
-      {
-        Serial.println("Failed verify status of beehives alarm, status code: " + String(httpCode));
-      }
-    }
-    else
-    {
-      Serial.println("No alarm");
-    }
-  }
-  else
-  {
-    Serial.println("Failed verify version beehives alarm, status code: " + String(httpCode));
-  }
+//         if (isAlarmEnabled == "[\"1\"]")
+//         {
+//           isAlarm = true;
+//           Serial.println("!!! ALARM setted !!!");
+//         }
+//       }
+//       else
+//       {
+//         Serial.println("Failed verify status of beehives alarm, status code: " + String(httpCode));
+//       }
+//     }
+//     else
+//     {
+//       Serial.println("No alarm");
+//     }
+//   }
+//   else
+//   {
+//     Serial.println("Failed verify version beehives alarm, status code: " + String(httpCode));
+//   }
 
-  http.end();
-}
+//   http.end();
+// }
 
 void setup()
 {
-  //disable brownout detector
+  // disable brownout detector
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
   Serial.begin(115200);
@@ -510,10 +574,13 @@ void setup()
       Serial.println("Internet connected, connect to Blynk");
       if (init_blynk())
       {
-        Serial.println("Blynk connected OK, wait to sync");
-        Blynk.run();
-        // delay for Blynk sync
-        delay(2000);
+        Serial.print("Blynk connected OK, wait to sync:");
+        for (int loop_count = 0; loop_count < 30; loop_count++)
+        {
+          Blynk.run();
+          delay(100);
+          Serial.print(".");
+        }
 
         device_connected_and_prepared = true;
         Serial.println("Setup done");
@@ -567,12 +634,13 @@ void loop()
 
     String currentTime = String(hour()) + ":" + minute();
     String minMaxSettedTime = String(min_hour) + ":" + String(min_minute) + " " + String(max_hour) + ":" + String(max_minute);
-    Serial.println(minMaxSettedTime);
+    Serial.println("Time set: " + minMaxSettedTime);
+    Serial.println("Time current: " + currentTime);
 
     Blynk.virtualWrite(V8, currentTime);
     Blynk.virtualWrite(V9, minMaxSettedTime);
 
-    checkBeehivesAlarm();
+    // checkBeehivesAlarm();
     Blynk.virtualWrite(V12, isAlarm ? "AKTUÁLNÍ ALARM!" : "OK");
 
     // use flash - take capture always
@@ -603,9 +671,6 @@ void loop()
     {
       Serial.println("Too late for capture image");
     }
-
-    // TODO: OTA asi nejde, mala pamet
-    // checkNewVersionAndUpdate();
   }
   else
   {
@@ -619,6 +684,3 @@ void loop()
   adc_power_release();
   esp_deep_sleep(get_deep_sleep_interval() * 1000000);
 }
-
-// 5.9.2019 21:00 4.11V
-// 6.9.2019 21:00 3.94V
