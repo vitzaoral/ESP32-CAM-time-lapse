@@ -7,14 +7,14 @@ $file_to_write = date("d.m.Y-H:i:s") . ".jpg";
 $camera_number = $_GET['camera'];
 
 // TODO: insert your settings !
-$cloudinary_upload_preset = "qf37nkjl";
+$cloudinary_upload_preset = "TODO";
 $cloudinary_url = "https://api.cloudinary.com/v1_1/vitaz/image/upload";
 
-$blynk_auth_token_bees = "2e01a905ae40474b8c27eaf8bacc2bfa"; // TODO: blynk2 token..
+$blynk_auth_token_bees = "TODO"; // TODO: blynk2 token..
 
-$blynk_auth_token_cam1 = "anAp0BIj66DFRWcN6lSqoVxeLcb3Vw3B";
-$blynk_auth_token_cam2 = "5xfxz0v6PwnIJDfmp3NrbGQpRSe_X0oC";
-$blynk_auth_token_cam3 = "z07Q_Mv7D5lf1ou0miTjKad0Y1c5HhK0";
+$blynk_auth_token_cam1 = "TODO";
+$blynk_auth_token_cam2 = "TODO";
+$blynk_auth_token_cam3 = "TODO";
 
 // get outside temperature
 $url = "http://blynk-cloud.com/" . $blynk_auth_token_bees . "/get/V23"; // TODO: blynk2 ..
