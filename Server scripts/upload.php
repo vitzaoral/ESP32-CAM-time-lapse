@@ -10,14 +10,14 @@ $camera_number = $_GET['camera'];
 $cloudinary_upload_preset = "TODO";
 $cloudinary_url = "https://api.cloudinary.com/v1_1/vitaz/image/upload";
 
-$blynk_auth_token_bees = "TODO"; // TODO: blynk2 token..
+$blynk_auth_token_bees = "TODO";
 
 $blynk_auth_token_cam1 = "TODO";
 $blynk_auth_token_cam2 = "TODO";
 $blynk_auth_token_cam3 = "TODO";
 
 // get outside temperature
-$url = "http://blynk-cloud.com/" . $blynk_auth_token_bees . "/get/V23"; // TODO: blynk2 ..
+$url = "https://blynk.cloud/external/api/get?token=" . $blynk_auth_token_bees . "&v23"
 
 $ch = curl_init();
 $options = array(
