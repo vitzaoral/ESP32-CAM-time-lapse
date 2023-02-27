@@ -1,7 +1,7 @@
 #define BLYNK_PRINT Serial
 #define BLYNK_TEMPLATE_ID "TMPL2ZKFCUm5"
 #define BLYNK_DEVICE_NAME "ESP32 Kamera"
-#define BLYNK_FIRMWARE_VERSION "2.0.1"
+#define BLYNK_FIRMWARE_VERSION "2.0.2"
 
 #include "Arduino.h"
 #include "esp_http_client.h"
@@ -123,6 +123,7 @@ BLYNK_WRITE(V0)
 }
 
 String overTheAirURL = "";
+String problem = "";
 
 BLYNK_WRITE(InternalPinOTA)
 {
@@ -313,8 +314,6 @@ bool init_camera()
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK)
   {
-    String problem = "";
-
     switch (err)
     {
     case ESP_FAIL:
@@ -441,8 +440,9 @@ static esp_err_t take_send_photo()
   fb = esp_camera_fb_get();
   if (!fb)
   {
-    Serial.println("Camera capture failed");
-    Blynk.virtualWrite(V13, "Camera capture failed");
+    problem = "Camera capture failed";
+    Serial.println(problem);
+    Blynk.virtualWrite(V13, problem);
     return ESP_FAIL;
   }
 
@@ -478,9 +478,9 @@ static esp_err_t take_send_photo()
   }
   else
   {
-    String errorMessage = "HTTP status error: " + String(err);
-    Serial.println(errorMessage);
-    Blynk.virtualWrite(V13, errorMessage);
+    problem = "HTTP status error: " + String(err);
+    Serial.println(problem);
+    Blynk.virtualWrite(V13, problem);
   }
 
   esp_http_client_cleanup(http_client);
@@ -621,27 +621,31 @@ void setup()
   }
 }
 
+void sendValuesToBlynk()
+{
+  Blynk.virtualWrite(V5, "IP: " + WiFi.localIP().toString() + "|G: " + WiFi.gatewayIP().toString() + "|S: " + WiFi.subnetMask().toString() + "|DNS: " + WiFi.dnsIP().toString());
+  Blynk.virtualWrite(V6, WiFi.RSSI());
+  Blynk.virtualWrite(V7, settings.version);
+
+  String currentTime = String(hour()) + ":" + minute();
+  String minMaxSettedTime = String(min_hour) + ":" + String(min_minute) + " " + String(max_hour) + ":" + String(max_minute);
+  Serial.println("Time set: " + minMaxSettedTime);
+  Serial.println("Time current: " + currentTime);
+
+  Blynk.virtualWrite(V8, currentTime);
+  Blynk.virtualWrite(V9, minMaxSettedTime);
+
+  // checkBeehivesAlarm();
+  Blynk.virtualWrite(V12, isAlarm ? "AKTUÁLNÍ ALARM!" : "OK");
+}
+
 void loop()
 {
   if (device_connected_and_prepared)
   {
     Serial.println("Set values to Blynk");
     Blynk.virtualWrite(V13, "OK");
-
-    Blynk.virtualWrite(V5, "IP: " + WiFi.localIP().toString() + "|G: " + WiFi.gatewayIP().toString() + "|S: " + WiFi.subnetMask().toString() + "|DNS: " + WiFi.dnsIP().toString());
-    Blynk.virtualWrite(V6, WiFi.RSSI());
-    Blynk.virtualWrite(V7, settings.version);
-
-    String currentTime = String(hour()) + ":" + minute();
-    String minMaxSettedTime = String(min_hour) + ":" + String(min_minute) + " " + String(max_hour) + ":" + String(max_minute);
-    Serial.println("Time set: " + minMaxSettedTime);
-    Serial.println("Time current: " + currentTime);
-
-    Blynk.virtualWrite(V8, currentTime);
-    Blynk.virtualWrite(V9, minMaxSettedTime);
-
-    // checkBeehivesAlarm();
-    Blynk.virtualWrite(V12, isAlarm ? "AKTUÁLNÍ ALARM!" : "OK");
+    sendValuesToBlynk();
 
     // use flash - take capture always
     if (use_flash)
@@ -674,7 +678,24 @@ void loop()
   }
   else
   {
-    Serial.println("Camera or internet connection is not ready");
+    Serial.println("Camera or internet connection is not ready. Send error to Blynk.");
+    if (init_wifi())
+    {
+      Serial.println("Internet connected, connect to Blynk");
+      if (init_blynk())
+      {
+        Serial.print("Blynk connected OK, wait to sync:");
+        Blynk.virtualWrite(V13, problem);
+        sendValuesToBlynk();
+        for (int loop_count = 0; loop_count < 30; loop_count++)
+        {
+          Blynk.run();
+          delay(100);
+          Serial.print(".");
+        }
+      }
+    }
+
   }
 
   Blynk.disconnect();
