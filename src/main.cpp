@@ -1,17 +1,15 @@
 #define BLYNK_PRINT Serial
 #define BLYNK_TEMPLATE_ID "TMPL2ZKFCUm5"
-#define BLYNK_DEVICE_NAME "ESP32 Kamera"
+#define BLYNK_TEMPLATE_NAME "ESP32 Kamera"
 #define BLYNK_FIRMWARE_VERSION "2.0.2"
 
 #include "Arduino.h"
 #include "esp_http_client.h"
 #include "esp_camera.h"
 #include "driver/rtc_io.h"
-
 #include <BlynkSimpleEsp32.h>
 #include <TimeLib.h>
 #include <EEPROM.h>
-#include "driver/adc.h"
 #include "../src/settings.cpp"
 #include <WidgetRTC.h>
 #include <HTTPClient.h>
@@ -20,6 +18,8 @@
 // Disable brownout problems
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
+
+// esspresif 32 v3.5.0
 
 // https://randomnerdtutorials.com/esp32-cam-video-streaming-face-recognition-arduino-ide/
 // https://loboris.eu/ESP32/ESP32-CAM%20Product%20Specification.pdf
@@ -39,6 +39,10 @@ int deep_sleep_interval = 285;
 
 // Deep sleep alarm interval in seconds
 int deep_sleep_alarm_interval = 20;
+
+int warmingTime = 12;
+int brightness = 0;
+int contrast = 0;
 
 // Use flash
 bool use_flash = false;
@@ -119,6 +123,33 @@ BLYNK_WRITE(V0)
     deep_sleep_interval = param.asInt();
     Serial.println("Deep sleep interval was set to: " + String(deep_sleep_interval));
     Blynk.virtualWrite(V3, String(deep_sleep_interval));
+  }
+}
+
+BLYNK_WRITE(V14)
+{
+  if (param.asInt())
+  {
+    warmingTime = param.asInt();
+    Serial.println("Warming time interval was set to: " + String(warmingTime)) + " seconds";
+  }
+}
+
+BLYNK_WRITE(V15)
+{
+  if (param.asInt())
+  {
+    brightness = param.asInt();
+    Serial.println("Brightness was set to: " + String(brightness));
+  }
+}
+
+BLYNK_WRITE(V16)
+{
+  if (param.asInt())
+  {
+    contrast = param.asInt();
+    Serial.println("Contrast was set to: " + String(contrast));
   }
 }
 
@@ -286,12 +317,15 @@ bool init_camera()
   config.pin_pclk = PCLK_GPIO_NUM;
   config.pin_vsync = VSYNC_GPIO_NUM;
   config.pin_href = HREF_GPIO_NUM;
-  config.pin_sscb_sda = SIOD_GPIO_NUM;
-  config.pin_sscb_scl = SIOC_GPIO_NUM;
+  config.pin_sccb_sda = SIOD_GPIO_NUM;
+  config.pin_sccb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000; // zkusit 16500000 https://github.com/espressif/esp32-camera/issues/150 // 20000000
-  config.pixel_format = PIXFORMAT_JPEG;
+  config.xclk_freq_hz = 20000000;
+  config.frame_size = FRAMESIZE_UXGA;
+  config.pixel_format = PIXFORMAT_JPEG; // for streaming
+  config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+  config.fb_location = CAMERA_FB_IN_PSRAM;
 
   // init with high specs to pre-allocate larger buffers
   if (psramFound())
@@ -299,19 +333,45 @@ bool init_camera()
     config.frame_size = FRAMESIZE_UXGA;
     // 0 is best, 63 lowest
     config.jpeg_quality = 20; // zkusit 1
-    config.fb_count = 3;      // zkusit 3?
-    Serial.printf("Buffer OK");
+    config.fb_count = 2;      // zkusit 3?
+    config.grab_mode = CAMERA_GRAB_LATEST;
+    Serial.println("Buffer OK");
   }
   else
   {
     config.frame_size = FRAMESIZE_SVGA;
     config.jpeg_quality = 12;
     config.fb_count = 1;
-    Serial.printf("Small buffer!");
+    Serial.println("Small buffer!");
   }
 
   // camera init
   esp_err_t err = esp_camera_init(&config);
+  sensor_t *s = esp_camera_sensor_get();
+  s->set_contrast(s, contrast);
+  s->set_brightness(s, brightness);
+  Serial.println("BRIGTHNESS: " + String(brightness));
+  Serial.println("CONTRAST: " + String(contrast));
+
+  // sensor_t *s = esp_camera_sensor_get();
+  // s->set_brightness(s, 50);
+
+  // s->set_gain_ctrl(s, 0);                       // auto gain off
+  //    s->set_awb_gain(s, 1);                        // Auto White Balance enable (0 or 1)
+  //    s->set_exposure_ctrl(s, 0);                   // auto exposure off
+  //    s->set_brightness(s, 2);                     // (-2 to 2) - set brightness
+  //    s->set_agc_gain(s, 30);          // set gain manually (0 - 30)
+  //    s->set_aec_value(s, 1200);     // set exposure manually  (0-1200)
+
+  //       s->set_agc_gain(s, x);                      // (1 - 31) - may require gain_ctrl set to 0 to operate?
+  // s->set_gain_ctrl(s, 0);                       // Auto White Balance gain control? (0 or 1)
+  // s->set_brightness(s, y);                    // (-2 to 2)
+
+  //     s->set_gain_ctrl(s, 0); // auto gain off (1 or 0)
+  // s->set_exposure_ctrl(s, 0); // auto exposure off (1 or 0)
+  // s->set_agc_gain(s, 0); // set gain manually (0 - 30)
+  // s->set_aec_value(s, 600); // set exposure manually (0-1200)
+
   if (err != ESP_OK)
   {
     switch (err)
@@ -369,9 +429,13 @@ bool init_camera()
     {
       if (init_blynk())
       {
-        Serial.println("Blynk connected OK, wait to sync");
+        Serial.println("Z Blynk connected OK, wait to sync");
         Blynk.run();
         Blynk.syncVirtual(V0);
+        Blynk.syncVirtual(V14);
+        Blynk.syncVirtual(V15);
+        Blynk.syncVirtual(V16);
+
         // delay for Blynk sync
         delay(2000);
 
@@ -438,6 +502,7 @@ static esp_err_t take_send_photo()
   }
 
   fb = esp_camera_fb_get();
+
   if (!fb)
   {
     problem = "Camera capture failed";
@@ -485,6 +550,7 @@ static esp_err_t take_send_photo()
 
   esp_http_client_cleanup(http_client);
   esp_camera_fb_return(fb);
+  fb = NULL;
   return err;
 }
 
@@ -501,124 +567,10 @@ bool checkHigherTime()
 void waitTakeSendPhoto()
 {
   // delay makes more bright picture (camera has time to boot on)
-  Serial.println("Waiting for taking camera picture.");
-  delay(12000);
+  Serial.println("Waiting for warming up camera: " + String(warmingTime) + " seconds.");
+  delay(warmingTime * 1000);
+  Serial.println("Going to take picture.");
   take_send_photo();
-}
-
-// void checkBeehivesAlarm()
-// {
-//   isAlarm = false;
-
-//   HTTPClient http;
-//   http.begin(client, settings.isAlarm);
-//   int httpCode = http.GET();
-
-//   if (httpCode == HTTP_CODE_OK)
-//   {
-//     String isAlarmValue = http.getString();
-//     Serial.println("Alarm: " + isAlarmValue);
-
-//     if (isAlarmValue != "[\"OK\"]")
-//     {
-//       Serial.println("!!! ALARM, check is alarm enabled !!!");
-
-//       http.begin(client, settings.alarmEnabled);
-//       httpCode = http.GET();
-
-//       if (httpCode == HTTP_CODE_OK)
-//       {
-//         String isAlarmEnabled = http.getString();
-//         Serial.println("Beehives alarm enabled: " + isAlarmEnabled);
-
-//         if (isAlarmEnabled == "[\"1\"]")
-//         {
-//           isAlarm = true;
-//           Serial.println("!!! ALARM setted !!!");
-//         }
-//       }
-//       else
-//       {
-//         Serial.println("Failed verify status of beehives alarm, status code: " + String(httpCode));
-//       }
-//     }
-//     else
-//     {
-//       Serial.println("No alarm");
-//     }
-//   }
-//   else
-//   {
-//     Serial.println("Failed verify version beehives alarm, status code: " + String(httpCode));
-//   }
-
-//   http.end();
-// }
-
-void setup()
-{
-  // disable brownout detector
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
-
-  Serial.begin(115200);
-
-  // initialize EEPROM with predefined size
-  EEPROM.begin(EEPROM_SIZE);
-
-  if (init_camera())
-  {
-    Serial.println("Camera OK");
-
-    if (init_wifi())
-    {
-      Serial.println("Internet connected, connect to Blynk");
-      if (init_blynk())
-      {
-        Serial.print("Blynk connected OK, wait to sync:");
-        for (int loop_count = 0; loop_count < 30; loop_count++)
-        {
-          Blynk.run();
-          delay(100);
-          Serial.print(".");
-        }
-
-        device_connected_and_prepared = true;
-        Serial.println("Setup done");
-
-        EEPROM.write(0, 0);
-        EEPROM.commit();
-      }
-      else
-      {
-        Serial.println("Blynk failed");
-      }
-    }
-    else
-    {
-      Serial.println("No WiFi");
-      int attempsCount = EEPROM.read(0);
-
-      if (attempsCount >= WIFI_ATTEMPTS_COUNT)
-      {
-        Serial.println("RESTART");
-        EEPROM.write(0, 0);
-        EEPROM.commit();
-        ESP.restart();
-      }
-      else
-      {
-        attempsCount += 1;
-        Serial.println("Attempts count " + String(attempsCount));
-        EEPROM.write(0, attempsCount);
-        EEPROM.commit();
-      }
-    }
-  }
-  else
-  {
-    // camera problem - is logged in method..
-    Serial.println("camera problem ");
-  }
 }
 
 void sendValuesToBlynk()
@@ -639,8 +591,73 @@ void sendValuesToBlynk()
   Blynk.virtualWrite(V12, isAlarm ? "AKTUÁLNÍ ALARM!" : "OK");
 }
 
-void loop()
+void setup()
 {
+  // disable brownout detector
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
+  Serial.begin(115200);
+
+  // initialize EEPROM with predefined size
+  EEPROM.begin(EEPROM_SIZE);
+
+  if (init_wifi())
+  {
+    Serial.println("Internet connected, connect to Blynk");
+    if (init_blynk())
+    {
+      Blynk.syncVirtual(V0);
+      Blynk.syncVirtual(V14);
+      Blynk.syncVirtual(V15);
+      Blynk.syncVirtual(V16);
+
+      Serial.print("X Blynk connected OK, wait to sync:");
+      for (int loop_count = 0; loop_count < 30; loop_count++)
+      {
+        Blynk.run();
+        delay(100);
+        Serial.print(".");
+      }
+
+      if (init_camera())
+      {
+        device_connected_and_prepared = true;
+        Serial.println("Setup done");
+      }
+      else
+      {
+        Serial.println("Camera init failed");
+      }
+
+      EEPROM.write(0, 0);
+      EEPROM.commit();
+    }
+    else
+    {
+      Serial.println("Blynk failed");
+    }
+  }
+  else
+  {
+    Serial.println("No WiFi");
+    int attempsCount = EEPROM.read(0);
+
+    if (attempsCount >= WIFI_ATTEMPTS_COUNT)
+    {
+      Serial.println("RESTART");
+      EEPROM.write(0, 0);
+      EEPROM.commit();
+      ESP.restart();
+    }
+    else
+    {
+      attempsCount += 1;
+      Serial.println("Attempts count " + String(attempsCount));
+      EEPROM.write(0, attempsCount);
+      EEPROM.commit();
+    }
+  }
+
   if (device_connected_and_prepared)
   {
     Serial.println("Set values to Blynk");
@@ -684,7 +701,7 @@ void loop()
       Serial.println("Internet connected, connect to Blynk");
       if (init_blynk())
       {
-        Serial.print("Blynk connected OK, wait to sync:");
+        Serial.print("Y Blynk connected OK, wait to sync:");
         Blynk.virtualWrite(V13, problem);
         sendValuesToBlynk();
         for (int loop_count = 0; loop_count < 30; loop_count++)
@@ -695,13 +712,17 @@ void loop()
         }
       }
     }
-
   }
 
   Blynk.disconnect();
   WiFi.disconnect();
-  Serial.println("Disconnected WiFi and Blynk done, go to sleep for " + String(get_deep_sleep_interval()) + " seconds.");
-  // https://github.com/espressif/arduino-esp32/issues/1113#issuecomment-494132709
-  adc_power_release();
-  esp_deep_sleep(get_deep_sleep_interval() * 1000000);
+
+  int interval = get_deep_sleep_interval();
+  Serial.println("Disconnected WiFi and Blynk done, go to sleep for " + String(interval) + " seconds.");
+
+  esp_deep_sleep(interval * 1000000);
+}
+
+void loop()
+{
 }
