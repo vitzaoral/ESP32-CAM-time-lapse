@@ -19,6 +19,8 @@
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
+#define BOARD_ESP32CAM_AITHINKER
+
 // esspresif 32 v3.5.0
 
 // https://randomnerdtutorials.com/esp32-cam-video-streaming-face-recognition-arduino-ide/
@@ -43,6 +45,8 @@ int deep_sleep_alarm_interval = 20;
 int warmingTime = 12;
 int brightness = 0;
 int contrast = 0;
+
+bool useAutocorrection = true;
 
 // Use flash
 bool use_flash = false;
@@ -225,6 +229,13 @@ BLYNK_WRITE(V10)
   }
 }
 
+// RTC - use or not use a real time
+BLYNK_WRITE(V17)
+{
+  useAutocorrection = param.asInt();
+  Serial.println("Autocorrection set to: " + String(useAutocorrection));
+}
+
 // LED flash
 BLYNK_WRITE(V4)
 {
@@ -297,7 +308,6 @@ bool init_blynk()
   // timeout v milisekundach * 3
   Blynk.connect(3000);
   return Blynk.connected();
-  // return true;
 }
 
 bool init_camera()
@@ -332,7 +342,7 @@ bool init_camera()
   {
     config.frame_size = FRAMESIZE_UXGA;
     // 0 is best, 63 lowest
-    config.jpeg_quality = 20; // zkusit 1
+    config.jpeg_quality = 10; // zkusit 1
     config.fb_count = 2;      // zkusit 3?
     config.grab_mode = CAMERA_GRAB_LATEST;
     Serial.println("Buffer OK");
@@ -347,30 +357,38 @@ bool init_camera()
 
   // camera init
   esp_err_t err = esp_camera_init(&config);
-  sensor_t *s = esp_camera_sensor_get();
-  s->set_contrast(s, contrast);
-  s->set_brightness(s, brightness);
-  Serial.println("BRIGTHNESS: " + String(brightness));
-  Serial.println("CONTRAST: " + String(contrast));
+  if (!useAutocorrection)
+  {
+    sensor_t *s = esp_camera_sensor_get();
+    s->set_contrast(s, contrast);
+    s->set_brightness(s, brightness);
+    Serial.println("BRIGTHNESS: " + String(brightness));
+    Serial.println("CONTRAST: " + String(contrast));
+  }
+  else
+  {
+    Serial.println("Use autocorrection brightness and contrast");
+  }
 
-  // sensor_t *s = esp_camera_sensor_get();
-  // s->set_brightness(s, 50);
+  Serial.println("Warming up camera for: " + String(warmingTime) + " seconds");
+  delay(warmingTime * 1000);
+  Serial.println("Warming up DONE");
 
-  // s->set_gain_ctrl(s, 0);                       // auto gain off
-  //    s->set_awb_gain(s, 1);                        // Auto White Balance enable (0 or 1)
-  //    s->set_exposure_ctrl(s, 0);                   // auto exposure off
-  //    s->set_brightness(s, 2);                     // (-2 to 2) - set brightness
-  //    s->set_agc_gain(s, 30);          // set gain manually (0 - 30)
-  //    s->set_aec_value(s, 1200);     // set exposure manually  (0-1200)
+  // s->set_gain_ctrl(s, 0);        // auto gain off
+  // s->set_awb_gain(s, 1);         // Auto White Balance enable (0 or 1)
+  // s->set_exposure_ctrl(s, 0);    // auto exposure off
+  // s->set_brightness(s, 2);       // (-2 to 2) - set brightness
+  // s->set_agc_gain(s, 30);        // set gain manually (0 - 30)
+  // s->set_aec_value(s, 1200);     // set exposure manually  (0-1200)
 
-  //       s->set_agc_gain(s, x);                      // (1 - 31) - may require gain_ctrl set to 0 to operate?
-  // s->set_gain_ctrl(s, 0);                       // Auto White Balance gain control? (0 or 1)
-  // s->set_brightness(s, y);                    // (-2 to 2)
+  // s->set_agc_gain(s, x);         // (1 - 31) - may require gain_ctrl set to 0 to operate?
+  // s->set_gain_ctrl(s, 0);        // Auto White Balance gain control? (0 or 1)
+  // s->set_brightness(s, y);       // (-2 to 2)
 
-  //     s->set_gain_ctrl(s, 0); // auto gain off (1 or 0)
-  // s->set_exposure_ctrl(s, 0); // auto exposure off (1 or 0)
-  // s->set_agc_gain(s, 0); // set gain manually (0 - 30)
-  // s->set_aec_value(s, 600); // set exposure manually (0-1200)
+  // s->set_gain_ctrl(s, 0);        // auto gain off (1 or 0)
+  // s->set_exposure_ctrl(s, 0);    // auto exposure off (1 or 0)
+  // s->set_agc_gain(s, 0);         // set gain manually (0 - 30)
+  // s->set_aec_value(s, 600);      // set exposure manually (0-1200)
 
   if (err != ESP_OK)
   {
@@ -435,6 +453,7 @@ bool init_camera()
         Blynk.syncVirtual(V14);
         Blynk.syncVirtual(V15);
         Blynk.syncVirtual(V16);
+        Blynk.syncVirtual(V17);
 
         // delay for Blynk sync
         delay(2000);
@@ -499,6 +518,14 @@ static esp_err_t take_send_photo()
     rtc_gpio_hold_dis(GPIO_NUM_4);
     digitalWrite(GPIO_NUM_4, HIGH);
     delay(500);
+  }
+
+  for (int i = 0; i < 3; i++)
+  {
+    fb = esp_camera_fb_get();
+    delay(1000);
+    esp_camera_fb_return(fb);
+    fb = nullptr;
   }
 
   fb = esp_camera_fb_get();
@@ -566,9 +593,6 @@ bool checkHigherTime()
 
 void waitTakeSendPhoto()
 {
-  // delay makes more bright picture (camera has time to boot on)
-  Serial.println("Waiting for warming up camera: " + String(warmingTime) + " seconds.");
-  delay(warmingTime * 1000);
   Serial.println("Going to take picture.");
   take_send_photo();
 }
@@ -610,6 +634,7 @@ void setup()
       Blynk.syncVirtual(V14);
       Blynk.syncVirtual(V15);
       Blynk.syncVirtual(V16);
+      Blynk.syncVirtual(V17);
 
       Serial.print("X Blynk connected OK, wait to sync:");
       for (int loop_count = 0; loop_count < 30; loop_count++)
