@@ -17,7 +17,7 @@ $blynk_auth_token_cam2 = "TODO";
 $blynk_auth_token_cam3 = "TODO";
 
 // get outside temperature
-$url = "https://blynk.cloud/external/api/get?token=" . $blynk_auth_token_bees . "&v23"
+$url = "https://blynk.cloud/external/api/get?token=" . $blynk_auth_token_bees . "&v23";
 
 $ch = curl_init();
 $options = array(
@@ -77,7 +77,7 @@ curl_close($ch);
 
 // Get response from Cloudinary - image URL
 $json = json_decode($response);
-$image_public_url = $json->url;
+$image_public_url = $json->secure_url;
 
 // Write image URL to blynk image widget on pin (based on camera number)
 $blynk_pin = "v1";
